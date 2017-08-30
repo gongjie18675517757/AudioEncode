@@ -10,16 +10,49 @@ using System.Windows.Forms;
 using NAudio.Wave;
 using NSpeex;
 using System.Runtime.InteropServices;
+using System.Net.Sockets;
 
 namespace WindowsFormsApp1
 {
     public partial class Form1 : Form
     {
+     
         public Form1()
         {
             InitializeComponent();
-
+            UdpClient udpClient = new System.Net.Sockets.UdpClient(19850);
+            UdpClient udpServer = new System.Net.Sockets.UdpClient(19851);
+            udpServer.BeginReceive(requestCallbacServer, udpServer);
+            udpClient.BeginReceive(requestCallbacClient, udpClient);
+            Send = new Action<byte[]>(o =>
+            {
+                udpClient.SendAsync(o, o.Length, "localhost", 19851);
+            });
         }
+        public Action<byte[]> Send { get; set; }
+        private void requestCallbacServer(IAsyncResult ar)
+        {
+            UdpClient client = ar.AsyncState as UdpClient;
+            if (ar.IsCompleted)
+            {
+                System.Net.IPEndPoint ep=null;
+                var bytes= client.EndReceive(ar, ref ep);
+                client.SendAsync(bytes, bytes.Length, ep);
+            }
+            client.BeginReceive(requestCallbacServer, client);
+        }
+        private void requestCallbacClient(IAsyncResult ar)
+        {
+            UdpClient client = ar.AsyncState as UdpClient;
+            if (ar.IsCompleted)
+            {
+                System.Net.IPEndPoint ep = null;
+                var bytes = client.EndReceive(ar, ref ep);
+                Decode(bytes);
+            }
+            client.BeginReceive(requestCallbacClient, client);
+        }
+
         private WaveIn recorder;
         private BufferedWaveProvider bufferedWaveProvider;
         private WaveOut player;
@@ -62,7 +95,8 @@ namespace WindowsFormsApp1
             Buffer.BlockCopy(encodedData, 0, sendData, 0, encodedBytes);
 
 
-            Decode(sendData);
+            // Decode(sendData);
+            Send(sendData);
 
             Console.WriteLine($"{e.BytesRecorded} => {encodedBytes}  {DateTime.Now}");
             //bufferedWaveProvider.AddSamples(e.Buffer, 0, e.BytesRecorded); 
